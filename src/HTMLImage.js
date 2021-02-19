@@ -102,11 +102,33 @@ export default class HTMLImage extends PureComponent {
         );
     }
 
-    validImage (source, style, props = {}) {
+    optimizeSizeForDevice (style, imagesMaxWidth) {
+        if (imagesMaxWidth > 0) {
+            const styleWidth = style.width > imagesMaxWidth ? imagesMaxWidth: style.width;
+            const styleHeight = style.height > 0 ? (style.height/style.width)*styleWidth : style.height;
+            return {
+                width: styleWidth,
+                height: styleHeight
+            };
+        }
+        return {};
+    }
+
+    validImage (source, style, imagesMaxWidth, props = {}) {
+        let overridenSizeStyle = {};
+        if (style instanceof Array) {
+            style.forEach((item) => {
+                if (item.width && item.height) {
+                    overridenSizeStyle = this.optimizeSizeForDevice(item, imagesMaxWidth);
+                }
+            });
+        } else if (style.width && style.height) {
+            overridenSizeStyle = this.optimizeSizeForDevice(style, imagesMaxWidth);
+        }
         return (
             <Image
               source={source}
-              style={[style, { width: this.state.width, height: this.state.height, resizeMode: 'cover' }]}
+              style={[{ width: this.state.width, height: this.state.height, resizeMode: 'contain' }, style, overridenSizeStyle ]}
               {...props}
             />
         );
@@ -121,8 +143,8 @@ export default class HTMLImage extends PureComponent {
     }
 
     render () {
-        const { source, style, passProps } = this.props;
+        const { source, style, imagesMaxWidth, passProps } = this.props;
 
-        return !this.state.error ? this.validImage(source, style, passProps) : this.errorImage;
+        return !this.state.error ? this.validImage(source, style, imagesMaxWidth, passProps) : this.errorImage;
     }
 }
