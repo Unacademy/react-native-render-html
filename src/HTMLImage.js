@@ -5,9 +5,11 @@ import PropTypes from 'prop-types';
 export default class HTMLImage extends PureComponent {
     constructor (props) {
         super(props);
+        const { styleWidth, styleHeight } = this.getDimensionsFromStyle(props.style, props.height, props.width);
         this.state = {
             width: props.imagesInitialDimensions.width,
-            height: props.imagesInitialDimensions.height
+            height: props.imagesInitialDimensions.height,
+            indeterminate: !(styleWidth && styleHeight)
         };
     }
 
@@ -82,7 +84,8 @@ export default class HTMLImage extends PureComponent {
         if (styleWidth && styleHeight) {
             return this.mounted && this.setState({
                 width: typeof styleWidth === 'string' && styleWidth.search('%') !== -1 ? styleWidth : parseInt(styleWidth, 10),
-                height: typeof styleHeight === 'string' && styleHeight.search('%') !== -1 ? styleHeight : parseInt(styleHeight, 10)
+                height: typeof styleHeight === 'string' && styleHeight.search('%') !== -1 ? styleHeight : parseInt(styleHeight, 10),
+                indeterminate: false
             });
         }
         // Fetch image dimensions only if they aren't supplied or if with or height is missing
@@ -94,7 +97,7 @@ export default class HTMLImage extends PureComponent {
                 }
                 const optimalWidth = imagesMaxWidth <= originalWidth ? imagesMaxWidth : originalWidth;
                 const optimalHeight = (optimalWidth * originalHeight) / originalWidth;
-                this.mounted && this.setState({ width: optimalWidth, height: optimalHeight, error: false });
+                this.mounted && this.setState({ width: optimalWidth, height: optimalHeight, indeterminate: false, error: false });
             },
             () => {
                 this.mounted && this.setState({ error: true });
@@ -102,11 +105,33 @@ export default class HTMLImage extends PureComponent {
         );
     }
 
-    validImage (source, style, props = {}) {
+    optimizeSizeForDevice (style, imagesMaxWidth) {
+        if (imagesMaxWidth > 0) {
+            const styleWidth = style.width > imagesMaxWidth ? imagesMaxWidth: style.width;
+            const styleHeight = style.height > 0 ? (style.height/style.width)*styleWidth : style.height;
+            return {
+                width: styleWidth,
+                height: styleHeight
+            };
+        }
+        return {};
+    }
+
+    validImage (source, style, imagesMaxWidth, props = {}) {
+        let overridenSizeStyle = {};
+        if (style instanceof Array) {
+            style.forEach((item) => {
+                if (item.width && item.height) {
+                    overridenSizeStyle = this.optimizeSizeForDevice(item, imagesMaxWidth);
+                }
+            });
+        } else if (style.width && style.height) {
+            overridenSizeStyle = this.optimizeSizeForDevice(style, imagesMaxWidth);
+        }
         return (
             <Image
               source={source}
-              style={[style, { width: this.state.width, height: this.state.height, resizeMode: 'cover' }]}
+              style={[{ width: this.state.width, height: this.state.height, resizeMode: 'contain' }, style, overridenSizeStyle ]}
               {...props}
             />
         );
@@ -120,9 +145,22 @@ export default class HTMLImage extends PureComponent {
         );
     }
 
-    render () {
-        const { source, style, passProps } = this.props;
 
-        return !this.state.error ? this.validImage(source, style, passProps) : this.errorImage;
+    get placeholderImage () {
+        return (
+            <View style={{width: this.props.imagesInitialDimensions.width, height: this.props.imagesInitialDimensions.height}} />
+        );
+    }
+
+    render () {
+        const { source, style, imagesMaxWidth, passProps } = this.props;
+
+        if (this.state.error) {
+            return this.errorImage;
+        } 
+        if (this.state.indeterminate) {
+            return this.placeholderImage;
+        }
+        return this.validImage(source, style, passProps);
     }
 }
